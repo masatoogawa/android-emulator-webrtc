@@ -15,6 +15,7 @@
  */
 import PropTypes from "prop-types";
 import React from "react";
+import ReactDOM from "react-dom";
 import * as Proto from "../../../proto/emulator_controller_pb";
 import EmulatorStatus from "../net/emulator_status";
 
@@ -35,6 +36,8 @@ export default function withMouseKeyHandler(WrappedComponent) {
       this.state = {
         deviceHeight: 1920,
         deviceWidth: 1080,
+        touchX: 0,
+        touchY: 0,
         mouse: {
           xp: 0,
           yp: 0,
@@ -58,7 +61,17 @@ export default function withMouseKeyHandler(WrappedComponent) {
 
     componentDidMount() {
       this.getScreenSize();
+      ReactDOM
+	.findDOMNode(this)
+	?.addEventListener("touchstart", this.handleTouchStart, {passive: false})
+      ReactDOM
+	.findDOMNode(this)
+	?.addEventListener("touchmove", this.handleTouchMove, {passive: false})
+      ReactDOM
+	.findDOMNode(this)
+	?.addEventListener("touchend", this.handleTouchEnd, {passive: false})
     }
+
 
     getScreenSize() {
       this.status.updateStatus((state) => {
@@ -156,9 +169,40 @@ export default function withMouseKeyHandler(WrappedComponent) {
       this.setState({ mouse: mouse }, this.setMouseCoordinates);
     };
 
+    setPseudoTouchCoordinates = (type, touches) => {
+      if (touches.length) {
+        const touch = touches[0];
+        const { clientX, clientY, identifier, force, radiusX, radiusY } = touch;
+        const { x, y } = this.scaleCoordinates(clientX, clientY);
+
+        var request = new Proto.MouseEvent();
+        request.setX(x);
+        request.setY(y);
+        this.setState({
+          touchX: x,
+          touchY: y,
+        });
+        request.setButtons(type === 2 ? 0 : 1);
+      }
+      else {
+        const { touchX, touchY } = this.state;
+        var request = new Proto.MouseEvent();
+        request.setX(touchX);
+        request.setY(touchY);
+        request.setButtons(type === 2 ? 0 : 1);
+      }
+      const { jsep } = this.props;
+      jsep.send("mouse", request);
+    }
+
     setTouchCoordinates = (type, touches) => {
+
+      console.log(`touch type:${type}`)
+
+      console.dir(touches)
       const scaleCoordinates = this.scaleCoordinates;
-      const touchesToSend = Object.keys(touches).map((index) => {
+      //const touchesToSend = Object.keys(touches).map((index) => {
+      let touchesToSend = Object.keys(touches).map((index) => {
         const touch = touches[index];
         const { clientX, clientY, identifier, force, radiusX, radiusY } = touch;
         const { x, y, scaleX, scaleY } = scaleCoordinates(clientX, clientY);
@@ -168,13 +212,46 @@ export default function withMouseKeyHandler(WrappedComponent) {
         const protoTouch = new Proto.Touch();
         protoTouch.setX(x);
         protoTouch.setY(y);
+        this.setState({
+          touchX: x,
+          touchY: y,
+        });
         protoTouch.setIdentifier(identifier);
-        protoTouch.setPressure(force);
-        protoTouch.setTouchMajor(Math.max(scaledRadiusX, scaledRadiusY));
-        protoTouch.setTouchMinor(Math.min(scaledRadiusX, scaledRadiusY));
 
+        let pressure = 0
+        if (type == 0) {
+           pressure = 1
+        }
+        if (type == 1) {
+           pressure = 1
+        }
+        if (type == 2) {
+           pressure = 0
+        }
+        //protoTouch.setPressure(Math.round(force));
+        protoTouch.setPressure(pressure);
+        protoTouch.setTouchMajor(Math.floor(Math.max(scaledRadiusX, scaledRadiusY)));
+        protoTouch.setTouchMinor(Math.floor(Math.min(scaledRadiusX, scaledRadiusY)));
+
+        console.dir(protoTouch)
         return protoTouch;
       });
+
+
+      if (type == 2) {
+        touchesToSend = Array(0)
+        const { touchX, touchY } = this.state;
+        const protoTouch = new Proto.Touch();
+        protoTouch.setX(touchX);
+        protoTouch.setY(touchY);
+        protoTouch.setPressure(0);
+        protoTouch.setTouchMajor(1);
+        protoTouch.setTouchMinor(1);
+        touchesToSend.push(protoTouch)
+      }
+
+
+      //console.dir(touchesToSend)
 
       // Make the grpc call.
       const requestTouchEvent = new Proto.TouchEvent();
@@ -187,17 +264,23 @@ export default function withMouseKeyHandler(WrappedComponent) {
       // Make sure they are not processed as mouse events later on.
       // See https://developer.mozilla.org/en-US/docs/Web/API/Touch_events
       e.preventDefault();
-      this.setTouchCoordinates(e.nativeEvent.type, e.nativeEvent.touches);
+      //this.setTouchCoordinates(e.nativeEvent.type, e.nativeEvent.touches);
+      this.setTouchCoordinates(0, e.touches);
+      //this.setPseudoTouchCoordinates (0, e.touches);
     };
 
     handleTouchMove = (e) => {
       e.preventDefault();
-      this.setTouchCoordinates(e.nativeEvent.type, e.nativeEvent.touches);
+      //this.setTouchCoordinates(e.nativeEvent.type, e.nativeEvent.touches);
+      this.setTouchCoordinates(1, e.touches);
+      //this.setPseudoTouchCoordinates (1, e.touches);
     };
 
     handleTouchEnd = (e) => {
       e.preventDefault();
-      this.setTouchCoordinates(e.nativeEvent.type, e.nativeEvent.touches);
+      //this.setTouchCoordinates(e.nativeEvent.type, e.nativeEvent.touches);
+      this.setTouchCoordinates(2, e.touches);
+      //this.setPseudoTouchCoordinates (2, e.touches);
     };
 
     preventDragHandler = (e) => {
@@ -207,9 +290,6 @@ export default function withMouseKeyHandler(WrappedComponent) {
     render() {
       return (
         <div /* handle interaction */
-          onTouchStart={this.handleTouchStart}
-          onTouchMove={this.handleTouchMove}
-          onTouchEnd={this.handleTouchEnd}
           onMouseDown={this.handleMouseDown}
           onMouseMove={this.handleMouseMove}
           onMouseUp={this.handleMouseUp}

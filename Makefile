@@ -48,7 +48,8 @@ GRPC_ROOT := $(QEMU_ROOT)/objs/distribution/emulator/lib
 
 # Protobuf settings. If you are running this in the AOSP tree you will want to run ninja install first.
 PROTODIR 	  := $(CURRENT_DIR)/src/proto/
-PROTOSRCDIR   := $(if $(wildcard $(GRPC_ROOT)/*.proto), $(GRPC_ROOT), $(ANDROID_SDK_ROOT)/emulator/lib)
+#PROTOSRCDIR   := $(if $(wildcard $(GRPC_ROOT)/*.proto), $(GRPC_ROOT), $(ANDROID_SDK_ROOT)/emulator/lib, ~/android-emulator-container-scripts/src/emu/emulator/lib)
+PROTOSRCDIR   := /home/mogawa/android-emulator-container-scripts/src/emu/emulator/lib
 PROTO_SRC     := $(wildcard $(PROTOSRCDIR)/*.proto)
 PROTO_OBJS    := $(addprefix $(PROTODIR)/, $(notdir $(PROTO_SRC:.proto=_pb.js)))
 PROXY_OBJS    := $(addprefix $(PROTODIR)/, $(notdir $(PROTO_SRC:.proto=_grpc_web_pb.js)))
